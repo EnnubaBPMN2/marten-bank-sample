@@ -1,4 +1,6 @@
-namespace Accounting.Events;
+using marten_bank_sample.Models.Projections;
+
+namespace marten_bank_sample.Models.Events;
 
 public class AccountCredited : Transaction
 {

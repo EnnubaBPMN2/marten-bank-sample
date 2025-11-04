@@ -1,6 +1,5 @@
-﻿using Account.Events;
-using Accounting.Events;
-using Accounting.Projections;
+﻿using marten_bank_sample.Models.Events;
+using marten_bank_sample.Models.Projections;
 using Marten;
 using Marten.Events.Daemon;
 using Marten.Events.Projections;
@@ -8,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Weasel.Core;
 
-namespace Accounting;
+namespace marten_bank_sample;
 
 public class Program
 {

@@ -1,8 +1,9 @@
-using Accounting.Events;
+using marten_bank_sample.Models.Events;
+using marten_bank_sample.Models.Projections;
 using Marten;
 using Marten.Exceptions;
 
-namespace Accounting;
+namespace marten_bank_sample;
 
 public class ConcurrencyExample
 {

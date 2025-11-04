@@ -1,6 +1,6 @@
-using Accounting.Events;
+using marten_bank_sample.Models.Events;
 
-namespace Accounting;
+namespace marten_bank_sample.Models.Projections;
 
 public class Account
 {

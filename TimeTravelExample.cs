@@ -1,6 +1,7 @@
+using marten_bank_sample.Models.Projections;
 using Marten;
 
-namespace Accounting;
+namespace marten_bank_sample;
 
 public class TimeTravelExample
 {

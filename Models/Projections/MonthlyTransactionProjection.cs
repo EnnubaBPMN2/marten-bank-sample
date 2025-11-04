@@ -1,8 +1,7 @@
-using Account.Events;
-using Accounting.Events;
+using marten_bank_sample.Models.Events;
 using Marten.Events.Projections;
 
-namespace Accounting.Projections;
+namespace marten_bank_sample.Models.Projections;
 
 // Proyección ASÍNCRONA: se procesa en background por el daemon
 public class MonthlyTransactionProjection : MultiStreamProjection<MonthlyTransactionSummary, string>

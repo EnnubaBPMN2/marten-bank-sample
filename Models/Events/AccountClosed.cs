@@ -1,4 +1,4 @@
-namespace Accounting.Events;
+namespace marten_bank_sample.Models.Events;
 
 public class AccountClosed
 {

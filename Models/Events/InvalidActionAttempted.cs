@@ -1,4 +1,4 @@
-namespace Account.Events;
+namespace marten_bank_sample.Models.Events;
 
 public class InvalidOperationAttempted
 {

@@ -1,4 +1,4 @@
-namespace Accounting.Projections;
+namespace marten_bank_sample.Models.Projections;
 
 // Read Model para reporte mensual
 public class MonthlyTransactionSummary

@@ -31,13 +31,13 @@ A comprehensive educational example demonstrating **Event Sourcing** and **CQRS*
 
 Event Sourcing is a pattern where **state changes are stored as a sequence of events** rather than just storing the current state. Instead of updating records in place, we append immutable events to an event store.
 
-| Traditional Approach (EF Core) | Event Sourcing with Marten |
-|-------------------------------|---------------------------|
+| Traditional Approach (EF Core)                 | Event Sourcing with Marten        |
+| ---------------------------------------------- | --------------------------------- |
 | UPDATE accounts SET balance = 150 WHERE id = 1 | INSERT event: AccountDebited(-50) |
-| Current state only | Complete audit trail |
-| Lost history | Time travel possible |
-| Overwrite data | Append-only |
-| Potential data loss | Guaranteed audit log |
+| Current state only                             | Complete audit trail              |
+| Lost history                                   | Time travel possible              |
+| Overwrite data                                 | Append-only                       |
+| Potential data loss                            | Guaranteed audit log              |
 
 ## Features
 
@@ -78,6 +78,7 @@ Event Sourcing is a pattern where **state changes are stored as a sequence of ev
 ```
 
 **Event Flow:**
+
 1. Command creates an event (e.g., AccountDebited)
 2. Event is appended to mt_events table
 3. Inline projection updates Account snapshot immediately
@@ -132,16 +133,19 @@ ALTER DATABASE marten_bank OWNER TO marten_user;
 ```
 
 **To use a different password or host:**
+
 1. Open `appsettings.json`
 2. Update the `Marten` connection string
 3. Save the file (no recompilation needed!)
 
 **For different environments:**
+
 - `appsettings.json` - Base configuration
 - `appsettings.Development.json` - Development overrides
 - `appsettings.Production.json` - Production settings (not in Git)
 
 **Environment variables** (highest priority):
+
 ```bash
 # Override connection string via environment variable
 export ConnectionStrings__Marten="host=prod-server;database=marten_bank;..."
@@ -197,6 +201,7 @@ marten-bank-sample/
 Events are immutable facts that represent something that happened in the past. All events are stored in the `mt_events` table.
 
 **AccountCreated.cs** - Opening a new account:
+
 ```csharp
 public class AccountCreated
 {
@@ -207,6 +212,7 @@ public class AccountCreated
 ```
 
 **AccountDebited.cs** - Withdrawing money:
+
 ```csharp
 public class AccountDebited
 {
@@ -219,6 +225,7 @@ public class AccountDebited
 ```
 
 **Appending Events:**
+
 ```csharp
 session.Events.Append(accountId, new AccountDebited
 {
@@ -237,6 +244,7 @@ Projections transform events into queryable read models.
 #### Inline Projections (Immediate Consistency)
 
 **Account.cs** - Real-time snapshot of account state:
+
 ```csharp
 public class Account
 {
@@ -255,6 +263,7 @@ public class Account
 ```
 
 Configured in Program.cs:
+
 ```csharp
 _.Projections.Snapshot<Account>(SnapshotLifecycle.Inline);
 ```
@@ -262,6 +271,7 @@ _.Projections.Snapshot<Account>(SnapshotLifecycle.Inline);
 #### Async Projections (Eventual Consistency)
 
 **MonthlyTransactionProjection.cs** - Cross-stream aggregation:
+
 ```csharp
 public class MonthlyTransactionProjection : MultiStreamProjection<MonthlyTransactionSummary, string>
 {
@@ -285,11 +295,13 @@ public class MonthlyTransactionProjection : MultiStreamProjection<MonthlyTransac
 ```
 
 Configured in Program.cs:
+
 ```csharp
 _.Projections.Add<MonthlyTransactionProjection>(ProjectionLifecycle.Async);
 ```
 
 Processing async projections:
+
 ```csharp
 using (var daemon = store.BuildProjectionDaemon())
 {
@@ -331,18 +343,21 @@ See [ConcurrencyExample.cs](ConcurrencyExample.cs) for a complete demonstration.
 Event Sourcing enables querying historical state at any point in time:
 
 **Query state at specific version:**
+
 ```csharp
 var accountAtVersion3 = await session.Events
     .AggregateStreamAsync<Account>(accountId, version: 3);
 ```
 
 **Query state at specific timestamp:**
+
 ```csharp
 var accountOnJan1 = await session.Events
     .AggregateStreamAsync<Account>(accountId, timestamp: new DateTime(2025, 1, 1));
 ```
 
 **Reconstruct state evolution:**
+
 ```csharp
 for (int version = 1; version <= events.Count; version++)
 {
@@ -360,36 +375,36 @@ Marten automatically creates the following core tables:
 
 ### mt_events (Event Store)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| seq_id | bigint | Global event sequence number (identity) |
-| id | uuid | Unique event ID |
-| stream_id | uuid | Aggregate/stream identifier |
-| version | integer | Event version within stream |
-| data | jsonb | Event payload (JSON) |
-| type | varchar | Event type name |
-| timestamp | timestamptz | When event occurred |
-| tenant_id | varchar | Multi-tenancy support |
-| mt_dotnet_type | varchar | .NET CLR type |
+| Column         | Type        | Description                             |
+| -------------- | ----------- | --------------------------------------- |
+| seq_id         | bigint      | Global event sequence number (identity) |
+| id             | uuid        | Unique event ID                         |
+| stream_id      | uuid        | Aggregate/stream identifier             |
+| version        | integer     | Event version within stream             |
+| data           | jsonb       | Event payload (JSON)                    |
+| type           | varchar     | Event type name                         |
+| timestamp      | timestamptz | When event occurred                     |
+| tenant_id      | varchar     | Multi-tenancy support                   |
+| mt_dotnet_type | varchar     | .NET CLR type                           |
 
 ### mt_doc_account (Account Projection)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Account ID (stream_id) |
-| data | jsonb | Account state (Owner, Balance, IsClosed, etc.) |
-| mt_last_modified | timestamptz | Last projection update |
-| mt_version | integer | Stream version at projection |
-| mt_deleted | boolean | Soft delete flag |
-| mt_deleted_at | timestamptz | Deletion timestamp |
+| Column           | Type        | Description                                    |
+| ---------------- | ----------- | ---------------------------------------------- |
+| id               | uuid        | Account ID (stream_id)                         |
+| data             | jsonb       | Account state (Owner, Balance, IsClosed, etc.) |
+| mt_last_modified | timestamptz | Last projection update                         |
+| mt_version       | integer     | Stream version at projection                   |
+| mt_deleted       | boolean     | Soft delete flag                               |
+| mt_deleted_at    | timestamptz | Deletion timestamp                             |
 
 ### mt_doc_monthlytransactionsummary (Async Projection)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar | Month key ("2025-11") |
-| data | jsonb | Monthly statistics (TotalTransactions, TotalDebited, etc.) |
-| mt_last_modified | timestamptz | Last projection update |
+| Column           | Type        | Description                                                |
+| ---------------- | ----------- | ---------------------------------------------------------- |
+| id               | varchar     | Month key ("2025-11")                                      |
+| data             | jsonb       | Monthly statistics (TotalTransactions, TotalDebited, etc.) |
+| mt_last_modified | timestamptz | Last projection update                                     |
 
 ## Example Output
 
@@ -467,6 +482,7 @@ Alcanzado en versión: 2
 ### SQL Queries for Verification
 
 **View all events:**
+
 ```sql
 SELECT
     seq_id,
@@ -480,6 +496,7 @@ ORDER BY timestamp DESC;
 ```
 
 **View specific account state:**
+
 ```sql
 SELECT
     id,
@@ -491,6 +508,7 @@ WHERE id = '8f2c4b93-...';
 ```
 
 **Monthly summary report:**
+
 ```sql
 SELECT
     data->>'Month' AS month,
@@ -504,6 +522,7 @@ ORDER BY id DESC;
 ```
 
 **Event stream integrity check:**
+
 ```sql
 SELECT
     stream_id,
@@ -515,6 +534,7 @@ HAVING COUNT(*) <> MAX(version);  -- Should return 0 rows
 ```
 
 **Audit trail for specific account:**
+
 ```sql
 SELECT
     version,
@@ -532,28 +552,31 @@ ORDER BY version;
 **Adding a new event type:**
 
 1. Create the event class:
-```csharp
-public class AccountFrozen
-{
+   
+   ```csharp
+   public class AccountFrozen
+   {
     public Guid AccountId { get; set; }
     public string Reason { get; set; }
     public DateTimeOffset FrozenAt { get; set; }
-}
-```
+   }
+   ```
 
 2. Register in Marten configuration:
-```csharp
-_.Events.AddEventTypes(new[] { typeof(AccountFrozen) });
-```
+   
+   ```csharp
+   _.Events.AddEventTypes(new[] { typeof(AccountFrozen) });
+   ```
 
 3. Add Apply handler to Account projection:
-```csharp
-public void Apply(AccountFrozen frozen)
-{
+   
+   ```csharp
+   public void Apply(AccountFrozen frozen)
+   {
     IsFrozen = true;
     FrozenReason = frozen.Reason;
-}
-```
+   }
+   ```
 
 ## Troubleshooting
 
@@ -562,6 +585,7 @@ public void Apply(AccountFrozen frozen)
 **Error:** `password authentication failed for user "marten_user"`
 
 **Solution:** Verify password in `appsettings.json` matches database:
+
 ```json
 {
   "ConnectionStrings": {
@@ -571,11 +595,13 @@ public void Apply(AccountFrozen frozen)
 ```
 
 Or reset the database password:
+
 ```sql
 ALTER USER marten_user WITH PASSWORD 'P@ssw0rd!';
 ```
 
 **Note:** You can also override via environment variable without changing the file:
+
 ```bash
 # PowerShell
 $env:ConnectionStrings__Marten="host=localhost;database=marten_bank;password=YourPassword;username=marten_user"
@@ -589,6 +615,7 @@ export ConnectionStrings__Marten="host=localhost;database=marten_bank;password=Y
 **Error:** `permission denied for schema public`
 
 **Solution:** Grant schema permissions:
+
 ```sql
 GRANT ALL ON SCHEMA public TO marten_user;
 ALTER DATABASE marten_bank OWNER TO marten_user;
@@ -599,6 +626,7 @@ ALTER DATABASE marten_bank OWNER TO marten_user;
 **Error:** `EventStreamUnexpectedMaxEventIdException`
 
 **Solution:** This is expected behavior for concurrent modifications. Implement retry logic:
+
 ```csharp
 catch (EventStreamUnexpectedMaxEventIdException)
 {
@@ -613,6 +641,7 @@ catch (EventStreamUnexpectedMaxEventIdException)
 **Issue:** Async projections not reflecting latest events
 
 **Solution:** Manually rebuild projection:
+
 ```csharp
 using (var daemon = store.BuildProjectionDaemon())
 {
@@ -639,12 +668,14 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ## Resources
 
 ### Documentation
+
 - **[Marten Documentation](https://martendb.io/)** - Official Marten docs
 - **[Event Sourcing Pattern](https://martinfowler.com/eaaDev/EventSourcing.html)** - Martin Fowler's explanation
 - **[CQRS Pattern](https://martinfowler.com/bliki/CQRS.html)** - Command Query Responsibility Segregation
 - **[marten-bank-sample.md](marten-bank-sample.md)** - Comprehensive technical documentation with SQL examples
 
 ### Learning Path
+
 1. Read [marten-bank-sample.md](marten-bank-sample.md) for detailed explanations
 2. Run the program and observe the output
 3. Execute SQL queries in [marten-bank-sample.md](marten-bank-sample.md) to explore the database
@@ -652,6 +683,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 5. Add your own event types and projections
 
 ### Community
+
 - **Marten Gitter**: [https://gitter.im/JasperFx/marten](https://gitter.im/JasperFx/marten)
 - **JasperFx Discord**: [https://discord.gg/WMxrvegf8H](https://discord.gg/WMxrvegf8H)
 
@@ -668,4 +700,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Made with Event Sourcing and CQRS** | **Powered by Marten and PostgreSQL**
-# marten-bank-sample
+
+# 

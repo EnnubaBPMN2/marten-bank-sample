@@ -94,7 +94,7 @@ public class Program
             AccountId = Guid.NewGuid()
         };
 
-        using (var session = store.OpenSession())
+        await using (var session = store.LightweightSession())
         {
             // create banking accounts
             session.Events.Append(khalid.AccountId, khalid);
@@ -103,7 +103,7 @@ public class Program
             await session.SaveChangesAsync();
         }
 
-        using (var session = store.OpenSession())
+        await using (var session = store.LightweightSession())
         {
             // load khalid's account
             var account = await session.LoadAsync<Account>(khalid.AccountId) 
@@ -128,7 +128,7 @@ public class Program
             await session.SaveChangesAsync();
         }
 
-        using (var session = store.OpenSession())
+        await using (var session = store.LightweightSession())
         {
             // load bill's account
             var account = await session.LoadAsync<Account>(bill.AccountId)
@@ -174,7 +174,7 @@ public class Program
         }
 
         // NUEVO: Bill retira todo su dinero antes de cerrar la cuenta
-        using (var session = store.OpenSession())
+        await using (var session = store.LightweightSession())
         {
             var billAccount = await session.LoadAsync<Account>(bill.AccountId);
 
@@ -200,7 +200,7 @@ public class Program
         }
 
         // Ahora cerrar la cuenta de Bill (balance cero)
-        using (var session = store.OpenSession())
+        await using (var session = store.LightweightSession())
         {
             var billAccount = await session.LoadAsync<Account>(bill.AccountId);
 

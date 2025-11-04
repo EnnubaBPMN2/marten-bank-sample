@@ -1,22 +1,25 @@
-namespace Accounting.Events
+namespace Accounting.Events;
+
+public class AccountCredited : Transaction
 {
-    public class AccountCredited : Transaction
+    public override void Apply(Account account)
     {
-      public override void Apply(Account account) {
-          account.Balance += Amount;
-      }
+        account.Balance += Amount;
+    }
 
-      public AccountDebited ToDebit() {
-          return new AccountDebited {
-              Amount = Amount,
-              To = From,
-              From = To,
-              Description = Description
-          };
-      }
+    public AccountDebited ToDebit()
+    {
+        return new AccountDebited
+        {
+            Amount = Amount,
+            To = From,
+            From = To,
+            Description = Description
+        };
+    }
 
-      public override string ToString() {
-          return $"{Time} Credited {Amount.ToString("C")} From {From}";
-      }
+    public override string ToString()
+    {
+        return $"{Time} Credited {Amount.ToString("C")} From {From}";
     }
 }

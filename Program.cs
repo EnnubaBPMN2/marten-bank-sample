@@ -1,244 +1,351 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Account.Events;
+﻿using Account.Events;
 using Accounting.Events;
 using Accounting.Projections;
 using Marten;
+using Marten.Events.Daemon;
+using Marten.Events.Projections;
+using Npgsql;
 using Weasel.Core;
 
-namespace Accounting
+namespace Accounting;
+
+public class Program
 {
-    public class Program
+    public static async Task Main(string[] args)
     {
-        public static async Task Main(string[] args)
+        // 🧹 MEJORA 1: Limpiar la base de datos antes de cada ejecución
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("🧹 Limpiando base de datos...");
+        await CleanDatabaseAsync();
+        Console.WriteLine("✅ Base de datos limpiada.\n");
+        Console.ResetColor();
+
+        // NUEVA OPCIÓN: ¿Habilitar el daemon asíncrono?
+        // Cambia esto a true para probar el daemon en tiempo real
+        var useAsyncDaemon = false;
+
+        var store = DocumentStore.For(_ =>
         {
-            var store = DocumentStore.For(_ =>
+            _.Connection("host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user");
+
+            _.AutoCreateSchemaObjects = AutoCreate.All;
+
+            _.Events.AddEventTypes(new[]
             {
-                _.Connection("host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user");
-
-                _.AutoCreateSchemaObjects = AutoCreate.All;
-
-                _.Events.AddEventTypes(new[] {
-                    typeof(AccountCreated),
-                    typeof(AccountCredited),
-                    typeof(AccountDebited),
-                    typeof(AccountClosed)
-                });
-
-                // Proyección INLINE (síncrona): se actualiza en la misma transacción
-                _.Projections.Snapshot<Account>(Marten.Events.Projections.SnapshotLifecycle.Inline);
-
-                // Proyección ASÍNCRONA: se procesa en background por el daemon
-                _.Projections.Add<MonthlyTransactionProjection>(Marten.Events.Projections.ProjectionLifecycle.Async);
+                typeof(AccountCreated),
+                typeof(AccountCredited),
+                typeof(AccountDebited),
+                typeof(AccountClosed)
             });
 
-            var khalid = new AccountCreated
-            {
-                Owner = "Khalid Abuhakmeh",
-                AccountId = Guid.NewGuid(),
-                StartingBalance = 1000m
-            };
+            // Proyección INLINE (síncrona): se actualiza en la misma transacción
+            _.Projections.Snapshot<Account>(SnapshotLifecycle.Inline);
 
-            var bill = new AccountCreated
-            {
-                Owner = "Bill Boga",
-                AccountId = Guid.NewGuid()
-            };
+            // Proyección ASÍNCRONA: se procesa en background por el daemon
+            _.Projections.Add<MonthlyTransactionProjection>(ProjectionLifecycle.Async);
+        });
 
-            using (var session = store.OpenSession())
-            {
-                // create banking accounts
-                session.Events.Append(khalid.AccountId, khalid);
-                session.Events.Append(bill.AccountId, bill);
-
-                session.SaveChanges();
-            }
-
-            using (var session = store.OpenSession())
-            {
-                // load khalid's account
-                var account = session.Load<Account>(khalid.AccountId);
-                // let's be generous
-                var amount = 100m;
-                var give = new AccountDebited
-                {
-                    Amount = amount,
-                    To = bill.AccountId,
-                    From = khalid.AccountId,
-                    Description = "Bill helped me out with some code."
-                };
-
-                if (account.HasSufficientFunds(give))
-                {
-                    session.Events.Append(give.From, give);
-                    session.Events.Append(give.To, give.ToCredit());
-                }
-                // commit these changes
-                session.SaveChanges();
-            }
-
-            using (var session = store.OpenSession())
-            {
-                // load bill's account
-                var account = session.Load<Account>(bill.AccountId);
-                // let's try to over spend
-                var amount = 1000m;
-                var spend = new AccountDebited
-                {
-                    Amount = amount,
-                    From = bill.AccountId,
-                    To = khalid.AccountId,
-                    Description = "Trying to buy that Ferrari"
-                };
-
-                if (account.HasSufficientFunds(spend))
-                {
-                    // should not get here
-                    session.Events.Append(spend.From, spend);
-                    session.Events.Append(spend.To, spend.ToCredit());
-                } else {
-                   session.Events.Append(account.Id, new InvalidOperationAttempted {
-                        Description = "Overdraft" 
-                    }); 
-                }
-                // commit these changes
-                session.SaveChanges();
-            }
-
-            using (var session = store.LightweightSession())
-            {
-                Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.DarkYellow;
-                Console.WriteLine("----- Final Balance ------");
-
-                var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
-
-                foreach (var account in accounts)
-                {
-                    Console.WriteLine(account);
-                }
-            }
-
-            // NUEVO: Bill retira todo su dinero antes de cerrar la cuenta
-            using (var session = store.OpenSession())
-            {
-                var billAccount = session.Load<Account>(bill.AccountId);
-
-                if (billAccount != null && billAccount.Balance > 0)
-                {
-                    Console.WriteLine();
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine($"Bill está retirando todo su balance de {billAccount.Balance:C} antes de cerrar...");
-
-                    var withdrawal = new AccountDebited
-                    {
-                        From = bill.AccountId,
-                        To = Guid.NewGuid(), // A una cuenta externa
-                        Amount = billAccount.Balance,
-                        Description = "Withdrawal before account closure"
-                    };
-
-                    session.Events.Append(bill.AccountId, withdrawal);
-                    session.SaveChanges();
-                }
-            }
-
-            // Ahora cerrar la cuenta de Bill (balance cero)
-            using (var session = store.OpenSession())
-            {
-                var billAccount = session.Load<Account>(bill.AccountId);
-
-                if (billAccount != null && billAccount.Balance == 0)
-                {
-                    var closeEvent = new AccountClosed
-                    {
-                        AccountId = bill.AccountId,
-                        Reason = "Customer requested closure - zero balance",
-                        FinalBalance = billAccount.Balance
-                    };
-
-                    session.Events.Append(bill.AccountId, closeEvent);
-                    session.SaveChanges();
-                }
-            }
-
-            using (var session = store.LightweightSession())
-            {
-                Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.DarkYellow;
-                Console.WriteLine("----- Final Balance (Updated) ------");
-
-                var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
-
-                foreach (var account in accounts)
-                {
-                    Console.WriteLine(account);
-                }
-            }
-
-            using (var session = store.LightweightSession())
-            {
-                foreach (var account in new[] { khalid, bill })
-                {
-                    Console.WriteLine();
-                    Console.WriteLine($"Transaction ledger for {account.Owner}");
-                    var stream = session.Events.FetchStream(account.AccountId);
-                    foreach (var item in stream)
-                    {
-                        Console.WriteLine(item.Data);
-                    }
-                    Console.WriteLine();
-                }
-            }
-
-            // PROYECCIÓN ASÍNCRONA: Procesar manualmente (rebuild) para esta demo
+        // NUEVO: Iniciar el daemon asíncrono si está habilitado
+        IProjectionDaemon? daemon = null;
+        if (useAsyncDaemon)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("✅ Async daemon HABILITADO - Las proyecciones se procesarán automáticamente");
             Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("----- Procesando Proyección Asíncrona (Rebuild) ------");
+            daemon = await store.BuildProjectionDaemonAsync();
+            await daemon.StartAllAsync();
+        }
+        else
+        {
+            // Nota: Marten puede generar su propia advertencia automáticamente
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("⚠️  Async daemon está deshabilitado en esta demo.");
+            Console.WriteLine("   Las proyecciones se procesarán manualmente usando RebuildProjectionAsync().");
+            Console.WriteLine("   Para producción, consulta ASYNC_DAEMON_PRODUCTION.md");
+            Console.WriteLine();
+        }
 
-            using (var daemon = await store.BuildProjectionDaemonAsync())
+        Console.ResetColor();
+
+        var khalid = new AccountCreated
+        {
+            Owner = "Khalid Abuhakmeh",
+            AccountId = Guid.NewGuid(),
+            StartingBalance = 1000m
+        };
+
+        var bill = new AccountCreated
+        {
+            Owner = "Bill Boga",
+            AccountId = Guid.NewGuid()
+        };
+
+        using (var session = store.OpenSession())
+        {
+            // create banking accounts
+            session.Events.Append(khalid.AccountId, khalid);
+            session.Events.Append(bill.AccountId, bill);
+
+            session.SaveChanges();
+        }
+
+        using (var session = store.OpenSession())
+        {
+            // load khalid's account
+            var account = session.Load<Account>(khalid.AccountId);
+            // let's be generous
+            var amount = 100m;
+            var give = new AccountDebited
             {
-                // Rebuild: procesa todos los eventos desde el inicio
-                await daemon.RebuildProjectionAsync<MonthlyTransactionProjection>(System.Threading.CancellationToken.None);
-                Console.WriteLine("Proyección reconstruida exitosamente.");
+                Amount = amount,
+                To = bill.AccountId,
+                From = khalid.AccountId,
+                Description = "Bill helped me out with some code."
+            };
+
+            if (account.HasSufficientFunds(give))
+            {
+                session.Events.Append(give.From, give);
+                session.Events.Append(give.To, give.ToCredit());
             }
 
-            // Consultar el reporte mensual
-            using (var session = store.LightweightSession())
+            // commit these changes
+            session.SaveChanges();
+        }
+
+        using (var session = store.OpenSession())
+        {
+            // load bill's account
+            var account = session.Load<Account>(bill.AccountId);
+            // let's try to over spend
+            var amount = 1000m;
+            var spend = new AccountDebited
+            {
+                Amount = amount,
+                From = bill.AccountId,
+                To = khalid.AccountId,
+                Description = "Trying to buy that Ferrari"
+            };
+
+            if (account.HasSufficientFunds(spend))
+            {
+                // should not get here
+                session.Events.Append(spend.From, spend);
+                session.Events.Append(spend.To, spend.ToCredit());
+            }
+            else
+            {
+                session.Events.Append(account.Id, new InvalidOperationAttempted
+                {
+                    Description = "Overdraft"
+                });
+            }
+
+            // commit these changes
+            session.SaveChanges();
+        }
+
+        using (var session = store.LightweightSession())
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.WriteLine("----- Final Balance ------");
+
+            var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
+
+            foreach (var account in accounts) Console.WriteLine(account);
+            Console.ResetColor();
+        }
+
+        // NUEVO: Bill retira todo su dinero antes de cerrar la cuenta
+        using (var session = store.OpenSession())
+        {
+            var billAccount = session.Load<Account>(bill.AccountId);
+
+            if (billAccount != null && billAccount.Balance > 0)
             {
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("----- Monthly Transaction Summary (Async Projection) ------");
+                Console.WriteLine($"💸 Bill está retirando todo su balance de {billAccount.Balance:C} antes de cerrar...");
+                Console.ResetColor();
 
-                // Query por el mes actual
-                var currentMonthKey = $"{DateTime.UtcNow.Year}-{DateTime.UtcNow.Month:D2}";
-                var summary = session.Query<MonthlyTransactionSummary>()
-                    .FirstOrDefault(x => x.Id == currentMonthKey);
+                var withdrawal = new AccountDebited
+                {
+                    From = bill.AccountId,
+                    To = Guid.NewGuid(), // A una cuenta externa
+                    Amount = billAccount.Balance,
+                    Description = "Withdrawal before account closure"
+                };
 
-                if (summary != null)
-                {
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine($"Month: {summary.Year}-{summary.Month:D2}");
-                    Console.WriteLine($"Accounts Created: {summary.AccountsCreated}");
-                    Console.WriteLine($"Accounts Closed: {summary.AccountsClosed}");
-                    Console.WriteLine($"Total Transactions: {summary.TotalTransactions}");
-                    Console.WriteLine($"Total Debited: {summary.TotalDebited:C}");
-                    Console.WriteLine($"Total Credited: {summary.TotalCredited:C}");
-                    Console.WriteLine($"Overdraft Attempts: {summary.OverdraftAttempts}");
-                    Console.WriteLine($"Last Updated: {summary.LastUpdated}");
-                }
-                else
-                {
-                    Console.WriteLine("No summary found.");
-                }
+                session.Events.Append(bill.AccountId, withdrawal);
+                session.SaveChanges();
             }
+        }
 
-            // DEMOS DE CONCURRENCY Y TIME TRAVEL
-            await ConcurrencyExample.DemonstrateConcurrency(store, khalid.AccountId);
-            await TimeTravelExample.DemonstrateTimeTravel(store, khalid.AccountId);
+        // Ahora cerrar la cuenta de Bill (balance cero)
+        using (var session = store.OpenSession())
+        {
+            var billAccount = session.Load<Account>(bill.AccountId);
 
-            Console.ReadLine();
+            if (billAccount != null && billAccount.Balance == 0)
+            {
+                var closeEvent = new AccountClosed
+                {
+                    AccountId = bill.AccountId,
+                    Reason = "Customer requested closure - zero balance",
+                    FinalBalance = billAccount.Balance
+                };
+
+                session.Events.Append(bill.AccountId, closeEvent);
+                session.SaveChanges();
+            }
+        }
+
+        using (var session = store.LightweightSession())
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.WriteLine("----- Final Balance (Updated) ------");
+
+            var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
+
+            foreach (var account in accounts) Console.WriteLine(account);
+            Console.ResetColor();
+        }
+
+        using (var session = store.LightweightSession())
+        {
+            foreach (var account in new[] { khalid, bill })
+            {
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"📋 Transaction ledger for {account.Owner}");
+                Console.ResetColor();
+                var stream = session.Events.FetchStream(account.AccountId);
+                foreach (var item in stream) Console.WriteLine(item.Data);
+                Console.WriteLine();
+            }
+        }
+
+        // PROYECCIÓN ASÍNCRONA: Comportamiento según daemon
+        if (useAsyncDaemon && daemon != null)
+        {
+            // Con daemon habilitado: esperar a que procese los eventos
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("----- ⏳ Esperando a que el daemon procese las proyecciones... ------");
+
+            // Dar tiempo al daemon para procesar
+            await Task.Delay(2000);
+
+            Console.WriteLine("✅ Daemon ha procesado los eventos en background.");
+            Console.ResetColor();
+        }
+        else
+        {
+            // Sin daemon: procesar manualmente (rebuild)
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("----- 🔄 Procesando Proyección Asíncrona (Rebuild Manual) ------");
+
+            using (var tempDaemon = await store.BuildProjectionDaemonAsync())
+            {
+                // Rebuild: procesa todos los eventos desde el inicio
+                await tempDaemon.RebuildProjectionAsync<MonthlyTransactionProjection>(CancellationToken.None);
+                Console.WriteLine("✅ Proyección reconstruida exitosamente.");
+            }
+            Console.ResetColor();
+        }
+
+        // Consultar el reporte mensual
+        using (var session = store.LightweightSession())
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("----- 📊 Monthly Transaction Summary (Async Projection) ------");
+            Console.ResetColor();
+
+            // Query por el mes actual
+            var currentMonthKey = $"{DateTime.UtcNow.Year}-{DateTime.UtcNow.Month:D2}";
+            var summary = session.Query<MonthlyTransactionSummary>()
+                .FirstOrDefault(x => x.Id == currentMonthKey);
+
+            if (summary != null)
+            {
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine($"📅 Month: {summary.Year}-{summary.Month:D2}");
+                Console.WriteLine($"👥 Accounts Created: {summary.AccountsCreated}");
+                Console.WriteLine($"🚪 Accounts Closed: {summary.AccountsClosed}");
+                Console.WriteLine($"💳 Total Transactions: {summary.TotalTransactions}");
+                Console.WriteLine($"💸 Total Debited: {summary.TotalDebited:C}");
+                Console.WriteLine($"💰 Total Credited: {summary.TotalCredited:C}");
+                Console.WriteLine($"⚠️  Overdraft Attempts: {summary.OverdraftAttempts}");
+                Console.WriteLine($"🕐 Last Updated: {summary.LastUpdated}");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("⚠️  No summary found.");
+                Console.ResetColor();
+            }
+        }
+
+        // DEMOS DE CONCURRENCY Y TIME TRAVEL
+        await ConcurrencyExample.DemonstrateConcurrency(store, khalid.AccountId);
+        await TimeTravelExample.DemonstrateTimeTravel(store, khalid.AccountId);
+
+        // Detener el daemon antes de salir
+        if (daemon != null)
+        {
+            await daemon.StopAllAsync();
+            daemon.Dispose();
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("🎉 Demo completado. Presiona Enter para salir...");
+        Console.ResetColor();
+        Console.ReadLine();
+    }
+
+    /// <summary>
+    /// 🧹 MEJORA 1: Limpia todas las tablas de Marten para comenzar con datos frescos
+    /// </summary>
+    private static async Task CleanDatabaseAsync()
+    {
+        var connectionString = "host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user";
+        
+        try
+        {
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            await using var cmd = new NpgsqlCommand(@"
+                -- Limpiar tablas principales
+                TRUNCATE TABLE mt_events CASCADE;
+                TRUNCATE TABLE mt_streams CASCADE;
+                
+                -- Limpiar proyecciones
+                TRUNCATE TABLE mt_doc_account CASCADE;
+                TRUNCATE TABLE mt_doc_monthlytransactionsummary CASCADE;
+                
+                -- Limpiar metadata del daemon (si existe)
+                DO $$ 
+                BEGIN
+                    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'mt_event_progression') THEN
+                        TRUNCATE TABLE mt_event_progression CASCADE;
+                    END IF;
+                END $$;
+            ", conn);
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"❌ Error al limpiar la base de datos: {ex.Message}");
+            Console.ResetColor();
         }
     }
 }

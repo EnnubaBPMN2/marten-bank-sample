@@ -49,6 +49,9 @@ Event Sourcing is a pattern where **state changes are stored as a sequence of ev
 - **Time Travel**: Query historical state at any point in time
 - **Complete Audit Trail**: Every state change is permanently recorded
 - **CQRS Pattern**: Separation of command (events) and query (projections) models
+- **Externalized Configuration**: Connection strings and settings in `appsettings.json`
+- **Environment-Specific Config**: Support for Development/Staging/Production settings
+- **Zero Compilation Warnings**: Clean build with modern async/await patterns
 
 ## Architecture
 
@@ -114,13 +117,40 @@ ALTER DATABASE marten_bank OWNER TO marten_user;
 
 ### 3. Configure Connection String
 
-The connection string is configured in [Program.cs:18](Program.cs#L18):
+**The connection string is now configured in `appsettings.json`** (not hardcoded in Program.cs):
 
-```csharp
-_.Connection("host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user");
+```json
+{
+  "ConnectionStrings": {
+    "Marten": "host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user"
+  },
+  "MartenSettings": {
+    "UseAsyncDaemon": false,
+    "AutoCreateSchemaObjects": true
+  }
+}
 ```
 
-Update the password if you used a different one.
+**To use a different password or host:**
+1. Open `appsettings.json`
+2. Update the `Marten` connection string
+3. Save the file (no recompilation needed!)
+
+**For different environments:**
+- `appsettings.json` - Base configuration
+- `appsettings.Development.json` - Development overrides
+- `appsettings.Production.json` - Production settings (not in Git)
+
+**Environment variables** (highest priority):
+```bash
+# Override connection string via environment variable
+export ConnectionStrings__Marten="host=prod-server;database=marten_bank;..."
+
+# Or in PowerShell
+$env:ConnectionStrings__Marten="host=prod-server;database=marten_bank;..."
+```
+
+See [CONFIGURACION_APPSETTINGS.md](CONFIGURACION_APPSETTINGS.md) for detailed configuration guide.
 
 ### 4. Restore Dependencies
 
@@ -531,9 +561,27 @@ public void Apply(AccountFrozen frozen)
 
 **Error:** `password authentication failed for user "marten_user"`
 
-**Solution:** Verify password in connection string matches database:
+**Solution:** Verify password in `appsettings.json` matches database:
+```json
+{
+  "ConnectionStrings": {
+    "Marten": "host=localhost;database=marten_bank;password=YourActualPassword;username=marten_user"
+  }
+}
+```
+
+Or reset the database password:
 ```sql
 ALTER USER marten_user WITH PASSWORD 'P@ssw0rd!';
+```
+
+**Note:** You can also override via environment variable without changing the file:
+```bash
+# PowerShell
+$env:ConnectionStrings__Marten="host=localhost;database=marten_bank;password=YourPassword;username=marten_user"
+
+# Bash
+export ConnectionStrings__Marten="host=localhost;database=marten_bank;password=YourPassword;username=marten_user"
 ```
 
 ### Permission Issues

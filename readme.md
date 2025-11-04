@@ -65,7 +65,7 @@ Event Sourcing is a pattern where **state changes are stored as a sequence of ev
 ┌─────────────────────────────────────────────────────────────┐
 │                    Marten Event Store                       │
 │                   (PostgreSQL: mt_events)                   │
-└──────────┬────────────────────────────────────┬─────────────┘
+└──────────┬─────────────────────────────────────┬────────────┘
            │                                     │
            │ Event Stream                        │ Event Stream
            ▼                                     ▼

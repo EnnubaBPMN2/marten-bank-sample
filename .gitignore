@@ -250,3 +250,38 @@ paket-files/
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# ========================================
+# CONFIGURACIÓN Y SECRETOS (AGREGADO)
+# ========================================
+
+# Archivos de configuración con secretos
+# Mantener appsettings.json base en Git
+# pero NO los archivos con credenciales reales
+
+# Configuración local de desarrollo (puede contener passwords)
+appsettings.Local.json
+appsettings.*.Local.json
+
+# Configuración de producción (NUNCA en Git)
+appsettings.Production.json
+appsettings.Staging.json
+
+# User Secrets (almacenados fuera del proyecto)
+secrets.json
+
+# Variables de entorno locales
+.env
+.env.local
+.env.*.local
+
+# Certificados y claves
+*.pfx
+*.key
+*.pem
+*.cer
+*.crt
+
+# Docker secrets
+docker-compose.override.yml
+*.secret

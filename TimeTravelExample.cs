@@ -79,7 +79,7 @@ public class TimeTravelExample
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine("--- 📈 Balance Máximo Histórico ---");
         Console.ResetColor();
-        
+
         decimal maxBalance = 0;
         var versionAtMax = 0;
         DateTimeOffset? timeAtMax = null;

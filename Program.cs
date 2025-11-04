@@ -4,6 +4,7 @@ using Accounting.Projections;
 using Marten;
 using Marten.Events.Daemon;
 using Marten.Events.Projections;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Weasel.Core;
 
@@ -13,20 +14,34 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
+        // 📋 Cargar configuración desde appsettings.json
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", false, true)
+            .AddJsonFile(
+                $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json",
+                true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        // Obtener connection string desde configuración
+        var connectionString = configuration.GetConnectionString("Marten")
+                               ?? throw new InvalidOperationException(
+                                   "Connection string 'Marten' not found in configuration");
+
+        // Obtener settings de Marten
+        var useAsyncDaemon = configuration.GetValue<bool>("MartenSettings:UseAsyncDaemon");
+
         // 🧹 MEJORA 1: Limpiar la base de datos antes de cada ejecución
         Console.ForegroundColor = ConsoleColor.Magenta;
         Console.WriteLine("🧹 Limpiando base de datos...");
-        await CleanDatabaseAsync();
+        await CleanDatabaseAsync(connectionString);
         Console.WriteLine("✅ Base de datos limpiada.\n");
         Console.ResetColor();
 
-        // NUEVA OPCIÓN: ¿Habilitar el daemon asíncrono?
-        // Cambia esto a true para probar el daemon en tiempo real
-        var useAsyncDaemon = false;
-
         var store = DocumentStore.For(_ =>
         {
-            _.Connection("host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user");
+            _.Connection(connectionString);
 
             _.AutoCreateSchemaObjects = AutoCreate.All;
 
@@ -166,7 +181,8 @@ public class Program
             {
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine($"💸 Bill está retirando todo su balance de {billAccount.Balance:C} antes de cerrar...");
+                Console.WriteLine(
+                    $"💸 Bill está retirando todo su balance de {billAccount.Balance:C} antes de cerrar...");
                 Console.ResetColor();
 
                 var withdrawal = new AccountDebited
@@ -254,6 +270,7 @@ public class Program
                 await tempDaemon.RebuildProjectionAsync<MonthlyTransactionProjection>(CancellationToken.None);
                 Console.WriteLine("✅ Proyección reconstruida exitosamente.");
             }
+
             Console.ResetColor();
         }
 
@@ -310,12 +327,10 @@ public class Program
     }
 
     /// <summary>
-    /// 🧹 MEJORA 1: Limpia todas las tablas de Marten para comenzar con datos frescos
+    ///     🧹 MEJORA 1: Limpia todas las tablas de Marten para comenzar con datos frescos
     /// </summary>
-    private static async Task CleanDatabaseAsync()
+    private static async Task CleanDatabaseAsync(string connectionString)
     {
-        var connectionString = "host=localhost;database=marten_bank;password=P@ssw0rd!;username=marten_user";
-        
         try
         {
             await using var conn = new NpgsqlConnection(connectionString);

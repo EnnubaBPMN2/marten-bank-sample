@@ -88,7 +88,7 @@ public class ConcurrencyExample
                 Console.WriteLine("   ✅ Usuario 2: Transacción exitosa!");
                 Console.ResetColor();
             }
-            catch (EventStreamUnexpectedMaxEventIdException ex)
+            catch (EventStreamUnexpectedMaxEventIdException)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("   ❌ Usuario 2: CONFLICTO DE CONCURRENCIA!");

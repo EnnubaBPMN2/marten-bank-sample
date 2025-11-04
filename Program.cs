@@ -100,13 +100,14 @@ public class Program
             session.Events.Append(khalid.AccountId, khalid);
             session.Events.Append(bill.AccountId, bill);
 
-            session.SaveChanges();
+            await session.SaveChangesAsync();
         }
 
         using (var session = store.OpenSession())
         {
             // load khalid's account
-            var account = session.Load<Account>(khalid.AccountId);
+            var account = await session.LoadAsync<Account>(khalid.AccountId) 
+                ?? throw new InvalidOperationException($"Account {khalid.AccountId} not found");
             // let's be generous
             var amount = 100m;
             var give = new AccountDebited
@@ -124,13 +125,14 @@ public class Program
             }
 
             // commit these changes
-            session.SaveChanges();
+            await session.SaveChangesAsync();
         }
 
         using (var session = store.OpenSession())
         {
             // load bill's account
-            var account = session.Load<Account>(bill.AccountId);
+            var account = await session.LoadAsync<Account>(bill.AccountId)
+                ?? throw new InvalidOperationException($"Account {bill.AccountId} not found");
             // let's try to over spend
             var amount = 1000m;
             var spend = new AccountDebited
@@ -156,7 +158,7 @@ public class Program
             }
 
             // commit these changes
-            session.SaveChanges();
+            await session.SaveChangesAsync();
         }
 
         using (var session = store.LightweightSession())
@@ -165,7 +167,7 @@ public class Program
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.WriteLine("----- Final Balance ------");
 
-            var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
+            var accounts = await session.LoadManyAsync<Account>(khalid.AccountId, bill.AccountId);
 
             foreach (var account in accounts) Console.WriteLine(account);
             Console.ResetColor();
@@ -174,7 +176,7 @@ public class Program
         // NUEVO: Bill retira todo su dinero antes de cerrar la cuenta
         using (var session = store.OpenSession())
         {
-            var billAccount = session.Load<Account>(bill.AccountId);
+            var billAccount = await session.LoadAsync<Account>(bill.AccountId);
 
             if (billAccount != null && billAccount.Balance > 0)
             {
@@ -193,14 +195,14 @@ public class Program
                 };
 
                 session.Events.Append(bill.AccountId, withdrawal);
-                session.SaveChanges();
+                await session.SaveChangesAsync();
             }
         }
 
         // Ahora cerrar la cuenta de Bill (balance cero)
         using (var session = store.OpenSession())
         {
-            var billAccount = session.Load<Account>(bill.AccountId);
+            var billAccount = await session.LoadAsync<Account>(bill.AccountId);
 
             if (billAccount != null && billAccount.Balance == 0)
             {
@@ -212,7 +214,7 @@ public class Program
                 };
 
                 session.Events.Append(bill.AccountId, closeEvent);
-                session.SaveChanges();
+                await session.SaveChangesAsync();
             }
         }
 
@@ -222,7 +224,7 @@ public class Program
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.WriteLine("----- Final Balance (Updated) ------");
 
-            var accounts = session.LoadMany<Account>(khalid.AccountId, bill.AccountId);
+            var accounts = await session.LoadManyAsync<Account>(khalid.AccountId, bill.AccountId);
 
             foreach (var account in accounts) Console.WriteLine(account);
             Console.ResetColor();
@@ -236,7 +238,7 @@ public class Program
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine($"📋 Transaction ledger for {account.Owner}");
                 Console.ResetColor();
-                var stream = session.Events.FetchStream(account.AccountId);
+                var stream = await session.Events.FetchStreamAsync(account.AccountId);
                 foreach (var item in stream) Console.WriteLine(item.Data);
                 Console.WriteLine();
             }

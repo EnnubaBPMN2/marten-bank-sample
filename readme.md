@@ -57,14 +57,14 @@ Event Sourcing is a pattern where **state changes are stored as a sequence of ev
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Application Layer                       │
+│                      Application Layer                      │
 │  (Program.cs - Commands: Create, Credit, Debit, Close)      │
 └──────────────────┬──────────────────────────────────────────┘
                    │ Commands
                    ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Marten Event Store                        │
-│                   (PostgreSQL: mt_events)                    │
+│                    Marten Event Store                       │
+│                   (PostgreSQL: mt_events)                   │
 └──────────┬────────────────────────────────────┬─────────────┘
            │                                     │
            │ Event Stream                        │ Event Stream
@@ -72,7 +72,7 @@ Event Sourcing is a pattern where **state changes are stored as a sequence of ev
 ┌──────────────────────┐              ┌─────────────────────────┐
 │  Inline Projection   │              │  Async Projection       │
 │  (Account Snapshot)  │              │  (Monthly Summary)      │
-│  ↳ Immediate         │              │  ↳ Eventual Consistency│
+│  ↳ Immediate         │              │  ↳ Eventual Consistency │
 │    Consistency       │              │  ↳ ProjectionDaemon     │
 └──────────────────────┘              └─────────────────────────┘
 ```

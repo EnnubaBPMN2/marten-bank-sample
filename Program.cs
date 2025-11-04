@@ -106,8 +106,8 @@ public class Program
         await using (var session = store.LightweightSession())
         {
             // load khalid's account
-            var account = await session.LoadAsync<Account>(khalid.AccountId) 
-                ?? throw new InvalidOperationException($"Account {khalid.AccountId} not found");
+            var account = await session.LoadAsync<Account>(khalid.AccountId)
+                          ?? throw new InvalidOperationException($"Account {khalid.AccountId} not found");
             // let's be generous
             var amount = 100m;
             var give = new AccountDebited
@@ -132,7 +132,7 @@ public class Program
         {
             // load bill's account
             var account = await session.LoadAsync<Account>(bill.AccountId)
-                ?? throw new InvalidOperationException($"Account {bill.AccountId} not found");
+                          ?? throw new InvalidOperationException($"Account {bill.AccountId} not found");
             // let's try to over spend
             var amount = 1000m;
             var spend = new AccountDebited

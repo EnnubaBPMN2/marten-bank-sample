@@ -621,7 +621,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 **Made with Event Sourcing and CQRS** | **Powered by Marten and PostgreSQL**
 # marten-bank-sample
-# marten-bank-sample
-# marten-bank-sample
-# marten-bank-sample
-# marten-bank-sample
